@@ -6,7 +6,7 @@
     <title>FOUFI</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
-        :root { --main-color: #ff0000; }
+        :root { --main-color: #ff0000; } /* اللون الافتراضي */
         * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Poppins', sans-serif; }
 
         body { background: #000; height: 100vh; width: 100%; overflow: hidden; }
@@ -16,6 +16,7 @@
             object-fit: cover; z-index: -1;
         }
 
+        /* --- شاشة التحميل --- */
         #loader {
             position: fixed; inset: 0; background: #000; z-index: 10000;
             display: flex; flex-direction: column; justify-content: center; align-items: center;
@@ -41,6 +42,7 @@
             transition: 0.5s;
         }
 
+        /* --- الموقع الأساسي --- */
         #main-site {
             position: fixed; inset: 0; display: flex; justify-content: center;
             align-items: center; opacity: 0; transition: 2.5s ease; z-index: 5;
@@ -63,6 +65,7 @@
             transition: 0.5s;
         }
 
+        /* --- أدوات التحكم (لوحة الألوان + الصوت) --- */
         .controls {
             position: fixed; top: 25px; left: 25px; right: 25px;
             display: flex; justify-content: space-between; align-items: center; z-index: 10001;
@@ -96,25 +99,25 @@
         }
         .btn-link:hover { background: var(--main-color); transform: scale(1.05); box-shadow: 0 0 15px var(--main-color); }
 
-        /* --- تنسيق عداد الزوار الحقيقي --- */
-        .real-counter {
+        /* --- عداد العين في أسفل اليمين --- */
+        .visitor-stat {
             position: fixed;
             bottom: 20px;
             right: 20px;
-            z-index: 9999;
-            background: rgba(255, 255, 255, 0.05);
+            z-index: 10001;
+            background: rgba(255, 255, 255, 0.07);
             backdrop-filter: blur(10px);
             padding: 8px 15px;
-            border-radius: 30px;
-            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            color: #fff;
             display: flex;
             align-items: center;
-            gap: 8px;
-            color: white;
+            gap: 10px;
             font-size: 14px;
+            font-weight: 500;
         }
-        .real-counter i { color: var(--main-color); font-size: 16px; }
-        #visitor-num { font-weight: bold; }
+        .visitor-stat i { color: var(--main-color); font-size: 16px; transition: 0.5s; }
 
         @keyframes fadeIn { from { opacity: 0; transform: scale(0.9); } to { opacity: 1; transform: scale(1); } }
     </style>
@@ -123,6 +126,7 @@
 
     <audio id="bg-music" src="music.mp3" loop></audio>
 
+    <!-- شاشة التحميل -->
     <div id="loader">
         <video class="video-bg" autoplay muted loop playsinline>
             <source src="loading_video.mp4" type="video/mp4">
@@ -133,6 +137,7 @@
         </div>
     </div>
 
+    <!-- شريط التحكم الثابت -->
     <div class="controls">
         <div class="palette">
             <div class="dot" style="background:#ff0000" onclick="updateTheme('#ff0000')"></div>
@@ -144,15 +149,13 @@
         <div class="vol-btn" onclick="toggleAudio()"><i id="vol-icon" class="fas fa-volume-mute"></i></div>
     </div>
 
-    <!-- العداد الحقيقي أسفل اليمين -->
-    <div class="real-counter">
+    <!-- عداد الزوار الحقيقي -->
+    <div class="visitor-stat">
         <i class="fas fa-eye"></i>
-        <span id="visitor-num">
-            <!-- كود العداد الصغير جداً والمخفي فعلياً لجلب البيانات -->
-            <script type="text/javascript" src="https://freevisitorcounters.com/en/home/counter/1283647/t/5"></script>
-        </span>
+        <span id="v-count">...</span>
     </div>
 
+    <!-- الموقع الأساسي -->
     <div id="main-site">
         <video class="video-bg" autoplay muted loop playsinline>
             <source src="back_video.mp4" type="video/mp4">
@@ -170,11 +173,12 @@
     </div>
 
     <script>
+        // وظيفة تحديث الألوان
         function updateTheme(color) {
             document.documentElement.style.setProperty('--main-color', color);
             const loadLogo = document.getElementById('loadLogo');
             const loadName = document.getElementById('loadName');
-            if(loadLogo){
+            if(loadLogo) {
                 loadLogo.style.borderColor = color;
                 loadLogo.style.filter = `drop-shadow(0 0 20px ${color})`;
             }
@@ -191,17 +195,40 @@
             else { m.pause(); i.className = 'fas fa-volume-mute'; }
         }
 
-        window.onload = () => {
-            // تنظيف شكل العداد لجعل الأرقام فقط تظهر بجانب العين
-            const counterSpan = document.getElementById('visitor-num');
-            if(counterSpan.querySelector('a')) {
-                 counterSpan.style.display = "inline-block";
+        // نظام عد الزوار الحقيقي (لا يتغير عند عمل Reload)
+        async function initVisitorCounter() {
+            const countKey = 'foufi_unique_visitor_v1';
+            const counterUrl = 'https://api.countapi.xyz/hit/foufi_dz_real/visits'; // API مجاني وسريع
+            
+            // التحقق إذا كان الزائر قد تم حظره محلياً (قام بالزيارة سابقاً)
+            let hasVisited = localStorage.getItem(countKey);
+            
+            try {
+                if (!hasVisited) {
+                    // إذا كانت أول مرة، يتم إرسال طلب زيادة العدد (Hit)
+                    const response = await fetch(counterUrl);
+                    const data = await response.json();
+                    document.getElementById('v-count').innerText = data.value;
+                    localStorage.setItem(countKey, data.value); // تخزين الرقم لمنع الزيادة عند التنشيط
+                } else {
+                    // إذا قام بعمل Reload، نجلب العدد الحالي فقط دون زيادته (Get)
+                    const getUrl = 'https://api.countapi.xyz/get/foufi_dz_real/visits';
+                    const response = await fetch(getUrl);
+                    const data = await response.json();
+                    document.getElementById('v-count').innerText = data.value;
+                }
+            } catch (e) {
+                document.getElementById('v-count').innerText = "1"; // في حال الخطأ
             }
+        }
 
+        window.onload = () => {
+            initVisitorCounter();
             setTimeout(() => {
                 const loader = document.getElementById('loader');
                 const site = document.getElementById('main-site');
                 const card = document.getElementById('card');
+                
                 loader.style.opacity = '0';
                 setTimeout(() => {
                     loader.style.display = 'none';
